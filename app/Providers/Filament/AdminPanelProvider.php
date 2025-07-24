@@ -31,6 +31,8 @@ class AdminPanelProvider extends PanelProvider
             ->login()
             ->resources([
                 \App\Filament\Resources\OrderResource::class,
+                \App\Filament\Resources\CustomerResource::class,
+                \App\Filament\Resources\ProductResource::class,
                 // Other resources...
             ])
             ->discoverResources(in: app_path('Filament/Admin/Resources'), for: 'App\\Filament\\Admin\\Resources')
