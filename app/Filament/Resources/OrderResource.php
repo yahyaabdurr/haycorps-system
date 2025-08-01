@@ -140,6 +140,12 @@ class OrderResource extends Resource
                 ->columns(2),
 
                 Forms\Components\Section::make('Order Items')
+                    ->live()
+                    ->afterStateUpdated(function (Get $get, Set $set) {
+                        $orderItems = $get('orderItems') ?? [];
+                        $totalSum = collect($orderItems)->sum('jumlah');
+                        $set('total_order_sum', $totalSum);
+                    })
                     ->schema([
                         Forms\Components\Repeater::make('orderItems')
                             ->relationship()
@@ -153,7 +159,7 @@ class OrderResource extends Resource
                                     ->afterStateUpdated(function ($state, Set $set, Get $get) {
                                         if (!$state) {
                                             $set('item_price', null);
-                                            $set('total_price', 0);
+                                            $set('jumlah', 0);
                                             return;
                                         }
                                         
@@ -162,7 +168,7 @@ class OrderResource extends Resource
                                             $set('item_price', $product->price);
                                             $set('item_name', $product->product_name);
                                             // Recalculate total immediately
-                                            $set('total_price', 
+                                            $set('jumlah', 
                                                 ($get('number_of_item') ?? 1) * $product->price
                                             );
                                         }
@@ -180,7 +186,7 @@ class OrderResource extends Resource
                                     ->minValue(1)
                                     ->live(debounce: 300)
                                     ->afterStateUpdated(function (Get $get, Set $set) {
-                                        $set('total_price', 
+                                        $set('jumlah', 
                                             ($get('number_of_item') ?? 1) * ($get('item_price') ?? 0)
                                         );
                                     })
@@ -192,14 +198,14 @@ class OrderResource extends Resource
                                     ->prefix('Rp')
                                     ->live(debounce: 300)
                                     ->afterStateUpdated(function (Get $get, Set $set) {
-                                        $set('total_price', 
+                                        $set('jumlah', 
                                             ($get('number_of_item') ?? 1) * ($get('item_price') ?? 0)
                                         );
                                     })
                                     ->required(),
 
-                                Forms\Components\TextInput::make('total_price')
-                                    ->label('Total Price')
+                                Forms\Components\TextInput::make('jumlah')
+                                    ->label('Jumlah')
                                     ->numeric()
                                     ->prefix('Rp')
                                     ->disabled()
@@ -236,134 +242,23 @@ class OrderResource extends Resource
                             ->reorderable()
                             ->cloneable()
                             ->collapsible(),
+
+                        Forms\Components\TextInput::make('total_order_sum')
+                            ->label('Total Order Sum')
+                            ->numeric()
+                            ->prefix('Rp')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->reactive(),
                     ])
 
-                // Forms\Components\Section::make('Order Items')
-                //     ->schema([
-                //         Forms\Components\Repeater::make('orderItems')
-                //             ->relationship('orderItems')
-                //             ->schema([
-                //                 Forms\Components\Select::make('item_name')
-                //                     ->label('Product')
-                //                     ->relationship('product', 'product_name')
-                //                     ->searchable()
-                //                     ->afterStateUpdated(function ($state, callable $set) {
-                //                         $product = \App\Models\Product::find($state);
-                //                         if ($product) {
-                //                             $set('orderItems.item_price', $product->cost);
-                                           
-                //                         } else {
-                //                             $set('orderItems.item_price', null);
-                //                         }
-
-                //                     })
-                //                     ->required(),
-                //                 Forms\Components\TextInput::make('number_of_item')
-                //                     ->label('Quantity')
-                //                     ->numeric()
-                //                     ->minValue(1)
-                //                      ->afterStateUpdated(function (Get $get, Set $set) {
-                //                         $set('total_price', 
-                //                             ($get('number_of_item') ?? 0) * ($get('item_price') ?? 0)
-                //                         );
-                //                     })
-                //                     ->required(),
-                //                 Forms\Components\TextInput::make('item_price')
-                //                     ->label('Price')
-                //                     ->numeric()
-
-                //                     ->live(onBlur: true) 
-                //                     ->afterStateUpdated(function (Get $get, Set $set) {
-                //                         $set('total_price', 
-                //                             ($get('number_of_item') ?? 0) * ($get('item_price') ?? 0)
-                //                         );
-                //                     })
-                //                     ->required(),
-
-                //                Forms\Components\TextInput::make('total_price')
-                //                     ->label('Total Price')
-                //                     ->numeric()
-                //                     ->disabled()
-                //                     ->dehydrated(false)
-                //                     ->default(0)
-                                    
-                //                 ,
-                //                 Forms\Components\TextInput::make('description')
-                //                     ->label('Notes'),
-                //             ])
-                //             ->columns(4)
-                //             ->columnSpanFull(),
-                //     ])
                     ->columns(2),
-            // Forms\Components\Section::make('Order Items')
-            //     ->schema([
-            //         Forms\Components\Repeater::make('orderItems')
-            //             ->relationship()
-            //             ->schema([
-            //                 Forms\Components\TextInput::make('itemName')
-            //                     ->required(),
-                            
-            //                 Forms\Components\TextInput::make('itemPrice')
-            //                     ->numeric()
-            //                     ->required(),
-                            
-            //                 Forms\Components\TextInput::make('numberOfItem')
-            //                     ->label('Quantity')
-            //                     ->numeric()
-            //                     ->required(),
-                            
-            //                 Forms\Components\TextInput::make('description'),
-            //             ])
-            //             ->columns(2)
-            //             ->columnSpanFull()
-            //     ]),
             
-            // Forms\Components\Section::make('Payment Information')
-            //     ->schema([
-            //         Forms\Components\Repeater::make('paymentHistory')
-            //             ->relationship()
-            //             ->schema([
-            //                 Forms\Components\TextInput::make('transactionId')
-            //                     ->required(),
-                            
-            //                 Forms\Components\Select::make('type')
-            //                     ->options([
-            //                         'payment' => 'Payment',
-            //                         'refund' => 'Refund',
-            //                     ])
-            //                     ->required(),
-                            
-            //                 Forms\Components\TextInput::make('amount')
-            //                     ->numeric()
-            //                     ->required(),
-                            
-            //                 Forms\Components\Select::make('method')
-            //                     ->options([
-            //                         'bank transfer' => 'Bank Transfer',
-            //                         'cash' => 'Cash',
-            //                         'credit card' => 'Credit Card',
-            //                     ])
-            //                     ->required(),
-                            
-            //                 Forms\Components\TextInput::make('description'),
-            //             ])
-            //             ->columns(2)
-            //             ->columnSpanFull()
-            //     ]),
-            
-            // // Hidden fields for system tracking
-            // Forms\Components\Hidden::make('createdBy')
-            //     ->default(auth()->user()?->name ?? 'system'),
-            
-            // Forms\Components\Hidden::make('lastModifiedBy')
-            //     ->default(auth()->user()?->name ?? 'system'),
-            
-            // Forms\Components\Hidden::make('skOrder')
-            //     ->default(Str::uuid()),
         ]);
             
     }
 
+    
     public static function table(Table $table): Table
     {
         return $table
