@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 
 class OrderItem extends Model
 {
@@ -35,13 +36,31 @@ class OrderItem extends Model
         'deleted_at' => 'datetime'
     ];
 
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            // Ensure sk_order_details is set
+            if (empty($model->sk_order_details)) {
+                $model->sk_order_details = Str::orderedUuid()->toString();
+            }
+
+            if (empty($model->item_name)) {
+                $model->item_name = $model->product?->product_name ?? 'Unknown Item';
+            }
+            // Set audit fields
+            $model->created_by = $model->created_by ?? (auth()->user()?->name ?? 'SYSTEM');
+            $model->last_modified_by = $model->last_modified_by ?? (auth()->user()?->name ?? 'SYSTEM');
+        });
+
+        static::updating(function ($model) {
+            $model->last_modified_by = auth()->user()?->name ?? 'SYSTEM';
+        });
+    }
+
     public function order()
     {
         return $this->belongsTo(Order::class, 'order_id', 'sk_order');
-    }
-    
-    public function product()
-    {
-        return $this->belongsTo(Product::class, 'product_id', 'sk_product');
     }
 }

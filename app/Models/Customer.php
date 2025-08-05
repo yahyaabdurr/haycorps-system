@@ -36,7 +36,7 @@ class Customer extends Model
         'deleted_at' => 'datetime'
     ];
 
-   protected static function boot()
+    protected static function boot()
     {
         parent::boot();
 

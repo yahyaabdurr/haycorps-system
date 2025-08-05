@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Filament\Forms\Set;
 use Filament\Forms\Get;
+use Filament\Forms\Components\Livewire;
 
 class OrderResource extends Resource
 {
@@ -23,151 +24,209 @@ class OrderResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-shopping-bag';
 
+
+    // Helper: total from full state
+    public static function updateOrderTotalFromState(?array $orderItems, Set $set): void
+    {
+        // \Log::info('OrderItems state:', $orderItems ?? []);
+        logger()->debug('Updating order total from state', ['orderItems' => $orderItems]);
+        $total = 0;
+        foreach ($orderItems ?? [] as $item) {
+            $total += $item['jumlah'] ?? 0;
+        }
+        logger()->debug('Computed total_order_sum:', ['total' => $total]);
+        $set('total_order_sum', $total);
+    }
+
+
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
                 Forms\Components\Section::make('Order Information')
-                ->schema([
-                    Forms\Components\TextInput::make('orderId')
-                        ->label('Order ID')
-                        ->required()
-                        ->default('ORD-' . Str::upper(Str::random(6)))
-                        ->maxLength(50)
-                        ->disabled(),
+                    ->schema([
+                        Forms\Components\TextInput::make('orderId')
+                            ->label('Order ID')
+                            ->required()
+                            ->default('ORD-' . Str::upper(Str::random(6)))
+                            ->maxLength(50)
+                            ->disabled(),
 
-                     Forms\Components\DatePicker::make('orderDate')
-                        ->required()
-                        ->default(now()->toDateString())
-                        ->disabled(),
-                    
-                    Forms\Components\Select::make('orderStatus')
-                        ->options([
-                            'Pending' => 'Pending',
-                            'Processing' => 'Processing',
-                            'Completed' => 'Completed',
-                            'Cancelled' => 'Cancelled',
-                        ])
-                        ->required()
-                        ->default('Pending'),
-                    
-                    Forms\Components\DatePicker::make('completionDate')
-                        ->required(),
-                    Forms\Components\FileUpload::make('fileUrl')
-                        ->label('File Attachment')
-                        ->directory('order-attachments')
-                        ->downloadable()
-                        ->preserveFilenames(),
-                ])
-                ->columns(2),
-            
-            Forms\Components\Section::make('Employee & Files')
-                ->schema([
-                    Forms\Components\TextInput::make('picEmployee')
-                        ->label('PIC Employee')
-                        ->required(),
-                    
-                    
-                ])
-                ->columns(2),
-            
-            Forms\Components\Section::make('Customer Information')
-                ->schema([
-                    Forms\Components\Select::make('customer_id')
-                        ->label('Customer Name')
-                        ->relationship('customer', 'customer_name')
-                        ->searchable()
-                        ->required()
-                        ->reactive()
-                        ->createOptionForm([
-                            Forms\Components\TextInput::make('customer_name')
-                                ->label('Customer Name')
-                                ->required(),
-                            Forms\Components\TextInput::make('email')
-                                ->label('Email')
-                                ->email(),
-                            Forms\Components\TextInput::make('phone_number')
-                                ->label('Phone Number'),
-                                
-                            Forms\Components\TextInput::make('institution')
-                                ->label('Institution'),
+                        Forms\Components\DatePicker::make('orderDate')
+                            ->required()
+                            ->default(now()->toDateString())
+                            ->disabled(),
 
-                             Forms\Components\TextInput::make('address1')
-                                ->label('Address 1')
-                                ->required(),
+                        Forms\Components\Select::make('orderStatus')
+                            ->options([
+                                'Pending' => 'Pending',
+                                'Processing' => 'Processing',
+                                'Completed' => 'Completed',
+                                'Cancelled' => 'Cancelled',
+                            ])
+                            ->required()
+                            ->default('Pending'),
 
-                            Forms\Components\TextInput::make('address2')
-                                ->label('Address 2')
-                                
+                        Forms\Components\DatePicker::make('completionDate')
+                            ->required(),
+                        Forms\Components\FileUpload::make('fileUrl')
+                            ->label('File Attachment')
+                            ->directory('order-attachments')
+                            ->downloadable()
+                            ->preserveFilenames(),
+                    ])
+                    ->columns(2),
 
-                        ])
-                        ->afterStateUpdated(function ($state, callable $set) {
-                            $customer = \App\Models\Customer::find($state);
-                            if ($customer) {
-                                $set('customer.email', $customer->email);
-                                $set('customer.phone_number', $customer->phone_number);
-                                $set('customer.institution', $customer->institution);
-                                $set('customer.address1', $customer->address1);
-                                $set('customer.address2', $customer->address2);
-                            } else {
-                                $set('customer.email', null);
-                                $set('customer.phone_number', null);
-                                $set('customer.institution', null);
-                                $set('customer.address1', null);
-                                $set('customer.address2', null);
-                            }
-                        }),
+                Forms\Components\Section::make('Employee & Files')
+                    ->schema([
+                        Forms\Components\TextInput::make('picEmployee')
+                            ->label('PIC Employee')
+                            ->required(),
 
-                    Forms\Components\TextInput::make('customer.email')
-                        ->label('Email')
-                        ->disabled(),
 
-                    Forms\Components\TextInput::make('customer.phone_number')
-                        ->label('Phone Number')
-                        ->disabled(),
+                    ])
+                    ->columns(2),
 
-                    Forms\Components\TextInput::make('customer.institution')
-                        ->label('Institution')
-                        ->disabled(),
+                Forms\Components\Section::make('Customer Information')
+                    ->schema([
+                        Forms\Components\Select::make('customer_id')
+                            ->label('Customer Name')
+                            ->relationship(
+                                name: 'customer',
+                                titleAttribute: 'customer_name',
+                                modifyQueryUsing: fn(Builder $query) => $query->select(['sk_customer', 'customer_name'])
+                            )
+                            ->searchable()
+                            ->required()
+                            ->reactive()
+                            ->createOptionForm([
+                                Forms\Components\TextInput::make('customer_name')
+                                    ->label('Customer Name')
+                                    ->required(),
+                                Forms\Components\TextInput::make('email')
+                                    ->label('Email')
+                                    ->email(),
+                                Forms\Components\TextInput::make('phone_number')
+                                    ->label('Phone Number'),
+                                Forms\Components\TextInput::make('institution')
+                                    ->label('Institution'),
+                                Forms\Components\TextInput::make('address1')
+                                    ->label('Address 1')
+                                    ->required(),
+                                Forms\Components\TextInput::make('address2')
+                                    ->label('Address 2')
+                            ])
+                            ->afterStateUpdated(function ($state, callable $set) {
+                                $customer = \App\Models\Customer::select([
+                                    'sk_customer',
+                                    'email',
+                                    'phone_number',
+                                    'institution',
+                                    'address1',
+                                    'address2'
+                                ])->find($state);
 
-                    Forms\Components\TextInput::make('customer.address1')
-                        ->label('Address 1')
-                        ->disabled(),
-                    Forms\Components\TextInput::make('customer.address2')
-                        ->label('Address 2')
-                        ->disabled(),
-                ])
-                ->columns(2),
+                                if ($customer) {
+                                    $set('customer.email', $customer->email);
+                                    $set('customer.phone_number', $customer->phone_number);
+                                    $set('customer.institution', $customer->institution);
+                                    $set('customer.address1', $customer->address1);
+                                    $set('customer.address2', $customer->address2);
+                                } else {
+                                    $set('customer.email', null);
+                                    $set('customer.phone_number', null);
+                                    $set('customer.institution', null);
+                                    $set('customer.address1', null);
+                                    $set('customer.address2', null);
+                                }
+                            }),
+
+                        Forms\Components\TextInput::make('customer.email')
+                            ->label('Email')
+                            ->disabled(),
+
+                        Forms\Components\TextInput::make('customer.phone_number')
+                            ->label('Phone Number')
+                            ->disabled(),
+
+                        Forms\Components\TextInput::make('customer.institution')
+                            ->label('Institution')
+                            ->disabled(),
+
+                        Forms\Components\TextInput::make('customer.address1')
+                            ->label('Address 1')
+                            ->disabled(),
+                        Forms\Components\TextInput::make('customer.address2')
+                            ->label('Address 2')
+                            ->disabled(),
+                    ])
+                    ->columns(2),
 
                 Forms\Components\Section::make('Order Items')
                     ->schema([
                         Forms\Components\Repeater::make('orderItems')
                             ->relationship()
+                            ->live(debounce: 300)
+                            ->afterStateUpdated(function (?array $state, Set $set) {
+                                \App\Filament\Resources\OrderResource::updateOrderTotalFromState($state, $set);
+                            })
+                            ->mutateRelationshipDataBeforeCreateUsing(function (array $data): array {
+                                // Ensure all required fields are set before creation
+                                if (isset($data['product_id'])) {
+                                    $product = \App\Models\Product::find($data['product_id']);
+                                    if ($product) {
+                                        $data['item_name'] = $product->product_name;
+                                        if (!isset($data['item_price'])) {
+                                            $data['item_price'] = $product->price;
+                                        }
+                                    }
+                                }
+                                return $data;
+                            })
+                            ->mutateRelationshipDataBeforeSaveUsing(function (array $data): array {
+                                // Ensure all required fields are set before saving
+                                if (isset($data['product_id'])) {
+                                    $product = \App\Models\Product::find($data['product_id']);
+                                    if ($product) {
+                                        $data['item_name'] = $product->product_name;
+                                        if (!isset($data['item_price'])) {
+                                            $data['item_price'] = $product->price;
+                                        }
+                                    }
+                                }
+                                return $data;
+                            })
                             ->schema([
-                                Forms\Components\Select::make('product_id')
+
+                                Forms\Components\Select::make('product_selection') // Changed from product_id
                                     ->label('Product')
-                                    ->relationship('product', 'product_name')
                                     ->searchable()
-                                    ->preload()
+                                    ->options(\App\Models\Product::pluck('product_name', 'sk_product'))
                                     ->live()
                                     ->afterStateUpdated(function ($state, Set $set, Get $get) {
                                         if (!$state) {
                                             $set('item_price', null);
-                                            $set('total_price', 0);
+                                            $set('item_name', null);
+                                            $set('jumlah', 0);
                                             return;
                                         }
-                                        
+
                                         $product = \App\Models\Product::find($state);
                                         if ($product) {
                                             $set('item_price', $product->price);
                                             $set('item_name', $product->product_name);
-                                            // Recalculate total immediately
-                                            $set('total_price', 
-                                                ($get('number_of_item') ?? 1) * $product->price
+
+                                            $quantity = $get('number_of_item') ?? 1;
+                                            $set('jumlah', $quantity * $product->price);
+
+                                            \App\Filament\Resources\OrderResource::updateOrderTotalFromState(
+                                                $get('../../orderItems'),
+                                                $set
                                             );
                                         }
                                     })
                                     ->required(),
+
 
                                 Forms\Components\TextInput::make('item_name')
                                     ->hidden()
@@ -179,9 +238,13 @@ class OrderResource extends Resource
                                     ->default(1)
                                     ->minValue(1)
                                     ->live(debounce: 300)
-                                    ->afterStateUpdated(function (Get $get, Set $set) {
-                                        $set('total_price', 
-                                            ($get('number_of_item') ?? 1) * ($get('item_price') ?? 0)
+                                    ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                        $itemPrice = $get('item_price') ?? 0;
+                                        $set('jumlah', $state * $itemPrice);
+
+                                        \App\Filament\Resources\OrderResource::updateOrderTotalFromState(
+                                            $get('../../orderItems'),
+                                            $set
                                         );
                                     })
                                     ->required(),
@@ -191,15 +254,18 @@ class OrderResource extends Resource
                                     ->numeric()
                                     ->prefix('Rp')
                                     ->live(debounce: 300)
-                                    ->afterStateUpdated(function (Get $get, Set $set) {
-                                        $set('total_price', 
-                                            ($get('number_of_item') ?? 1) * ($get('item_price') ?? 0)
+                                    ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                        $qty = $get('number_of_item') ?? 1;
+                                        $set('jumlah', $qty * $state);
+                                        \App\Filament\Resources\OrderResource::updateOrderTotalFromState(
+                                            $get('../../orderItems'),
+                                            $set
                                         );
                                     })
                                     ->required(),
 
-                                Forms\Components\TextInput::make('total_price')
-                                    ->label('Total Price')
+                                Forms\Components\TextInput::make('jumlah')
+                                    ->label('Jumlah')
                                     ->numeric()
                                     ->prefix('Rp')
                                     ->disabled()
@@ -208,203 +274,70 @@ class OrderResource extends Resource
                                 Forms\Components\TextInput::make('description')
                                     ->label('Notes')
                                     ->columnSpanFull(),
+
                             ])
                             ->columns([
                                 'default' => 1,
                                 'sm' => 2,
                                 'md' => 4,
                             ])
-                            ->columnSpanFull()
-                            ->mutateRelationshipDataBeforeFillUsing(function (array $data): array {
-                                if (isset($data['product_id'])) {
-                                    $product = \App\Models\Product::find($data['product_id']);
-                                    if ($product) {
-                                        $data['item_name'] = $product->product_name;
-                                    }
-                                }
-                                return $data;
-                            })
-                            ->mutateRelationshipDataBeforeSaveUsing(function (array $data): array {
-                                if (isset($data['product_id'])) {
-                                    $product = \App\Models\Product::find($data['product_id']);
-                                    if ($product) {
-                                        $data['item_name'] = $product->product_name;
-                                    }
-                                }
-                                return $data;
-                            })
-                            ->reorderable()
-                            ->cloneable()
-                            ->collapsible(),
+                            ->columnSpanFull(),
+
+                        Forms\Components\TextInput::make('total_order_sum')
+                            ->label('Total Order Sum')
+                            ->numeric()
+                            ->prefix('Rp')
+                            ->reactive()
+                            ->dehydrated()
+                            ->default(0)
                     ])
 
-                // Forms\Components\Section::make('Order Items')
-                //     ->schema([
-                //         Forms\Components\Repeater::make('orderItems')
-                //             ->relationship('orderItems')
-                //             ->schema([
-                //                 Forms\Components\Select::make('item_name')
-                //                     ->label('Product')
-                //                     ->relationship('product', 'product_name')
-                //                     ->searchable()
-                //                     ->afterStateUpdated(function ($state, callable $set) {
-                //                         $product = \App\Models\Product::find($state);
-                //                         if ($product) {
-                //                             $set('orderItems.item_price', $product->cost);
-                                           
-                //                         } else {
-                //                             $set('orderItems.item_price', null);
-                //                         }
-
-                //                     })
-                //                     ->required(),
-                //                 Forms\Components\TextInput::make('number_of_item')
-                //                     ->label('Quantity')
-                //                     ->numeric()
-                //                     ->minValue(1)
-                //                      ->afterStateUpdated(function (Get $get, Set $set) {
-                //                         $set('total_price', 
-                //                             ($get('number_of_item') ?? 0) * ($get('item_price') ?? 0)
-                //                         );
-                //                     })
-                //                     ->required(),
-                //                 Forms\Components\TextInput::make('item_price')
-                //                     ->label('Price')
-                //                     ->numeric()
-
-                //                     ->live(onBlur: true) 
-                //                     ->afterStateUpdated(function (Get $get, Set $set) {
-                //                         $set('total_price', 
-                //                             ($get('number_of_item') ?? 0) * ($get('item_price') ?? 0)
-                //                         );
-                //                     })
-                //                     ->required(),
-
-                //                Forms\Components\TextInput::make('total_price')
-                //                     ->label('Total Price')
-                //                     ->numeric()
-                //                     ->disabled()
-                //                     ->dehydrated(false)
-                //                     ->default(0)
-                                    
-                //                 ,
-                //                 Forms\Components\TextInput::make('description')
-                //                     ->label('Notes'),
-                //             ])
-                //             ->columns(4)
-                //             ->columnSpanFull(),
-                //     ])
                     ->columns(2),
-            // Forms\Components\Section::make('Order Items')
-            //     ->schema([
-            //         Forms\Components\Repeater::make('orderItems')
-            //             ->relationship()
-            //             ->schema([
-            //                 Forms\Components\TextInput::make('itemName')
-            //                     ->required(),
-                            
-            //                 Forms\Components\TextInput::make('itemPrice')
-            //                     ->numeric()
-            //                     ->required(),
-                            
-            //                 Forms\Components\TextInput::make('numberOfItem')
-            //                     ->label('Quantity')
-            //                     ->numeric()
-            //                     ->required(),
-                            
-            //                 Forms\Components\TextInput::make('description'),
-            //             ])
-            //             ->columns(2)
-            //             ->columnSpanFull()
-            //     ]),
-            
-            // Forms\Components\Section::make('Payment Information')
-            //     ->schema([
-            //         Forms\Components\Repeater::make('paymentHistory')
-            //             ->relationship()
-            //             ->schema([
-            //                 Forms\Components\TextInput::make('transactionId')
-            //                     ->required(),
-                            
-            //                 Forms\Components\Select::make('type')
-            //                     ->options([
-            //                         'payment' => 'Payment',
-            //                         'refund' => 'Refund',
-            //                     ])
-            //                     ->required(),
-                            
-            //                 Forms\Components\TextInput::make('amount')
-            //                     ->numeric()
-            //                     ->required(),
-                            
-            //                 Forms\Components\Select::make('method')
-            //                     ->options([
-            //                         'bank transfer' => 'Bank Transfer',
-            //                         'cash' => 'Cash',
-            //                         'credit card' => 'Credit Card',
-            //                     ])
-            //                     ->required(),
-                            
-            //                 Forms\Components\TextInput::make('description'),
-            //             ])
-            //             ->columns(2)
-            //             ->columnSpanFull()
-            //     ]),
-            
-            // // Hidden fields for system tracking
-            // Forms\Components\Hidden::make('createdBy')
-            //     ->default(auth()->user()?->name ?? 'system'),
-            
-            // Forms\Components\Hidden::make('lastModifiedBy')
-            //     ->default(auth()->user()?->name ?? 'system'),
-            
-            // Forms\Components\Hidden::make('skOrder')
-            //     ->default(Str::uuid()),
-        ]);
-            
+
+            ]);
     }
 
     public static function table(Table $table): Table
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('orderId')
+                Tables\Columns\TextColumn::make('order_id')
                     ->searchable()
                     ->sortable(),
-                
-                Tables\Columns\TextColumn::make('customer.customerName')
+
+                Tables\Columns\TextColumn::make('customer.customer_name')
                     ->searchable()
                     ->sortable()
                     ->limit(30),
-                
-                Tables\Columns\TextColumn::make('orderStatus')
+
+                Tables\Columns\TextColumn::make('order_status')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
+                    ->color(fn(string $state): string => match ($state) {
                         'Pending' => 'warning',
                         'Processing' => 'info',
                         'Completed' => 'success',
                         'Cancelled' => 'danger',
                     })
                     ->sortable(),
-                
-                Tables\Columns\TextColumn::make('totalPrice')
+
+                Tables\Columns\TextColumn::make('total_price')
                     ->money('IDR')
                     ->sortable(),
-                
-                Tables\Columns\TextColumn::make('orderDate')
+
+                Tables\Columns\TextColumn::make('order_date')
                     ->dateTime()
                     ->sortable(),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('orderStatus')
+                Tables\Filters\SelectFilter::make('order_status')
                     ->options([
                         'Pending' => 'Pending',
                         'Processing' => 'Processing',
                         'Completed' => 'Completed',
                         'Cancelled' => 'Cancelled',
                     ])
-                    ->attribute('orderStatus'),
-                
+                    ->attribute('order_status'),
+
                 Tables\Filters\TrashedFilter::make(),
             ])
             ->actions([
@@ -418,7 +351,7 @@ class OrderResource extends Resource
                     Tables\Actions\RestoreBulkAction::make(),
                 ]),
             ])
-            ->defaultSort('orderDate', 'desc');
+            ->defaultSort('order_date', 'desc');
     }
 
     public static function getRelations(): array
@@ -434,7 +367,7 @@ class OrderResource extends Resource
         return [
             'index' => Pages\ListOrders::route('/'),
             'create' => Pages\CreateOrder::route('/create'),
-           
+
             'edit' => Pages\EditOrder::route('/{record}/edit'),
         ];
     }
@@ -442,13 +375,13 @@ class OrderResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
-            ->with(['customer:id,customerName']) // Eager load only needed fields
+            ->with(['customer:sk_customer,customer_name'])
             ->withoutGlobalScopes([
                 SoftDeletingScope::class,
             ]);
     }
 
- // Change from protected to public
+    // Change from protected to public
     public static function getNavigationBadge(): ?string
     {
         return static::getModel()::count();
